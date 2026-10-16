@@ -1,0 +1,27 @@
+# 依赖与构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 环境变量（真实密钥只留在本地，仓库里只有 .env.example 占位值）
+.env
+.env.local
+*.local
+
+# Vercel 本地状态（vercel CLI 生成，不要提交）
+.vercel/
+
+# 日志
+*.log
+npm-debug.log*
+
+# Playwright 持久化浏览器 profile
+.browser-profile/
+
+# e2e 运行期临时文件与临时产物（下划线开头的都是脚本跑出来的，不入库）
+_e2e/_tmp/
+_e2e/_*
+
+# 系统文件
+.DS_Store
+Thumbs.db

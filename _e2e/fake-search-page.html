@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>flowers - Sam's Club</title>
+</head>
+<body>
+  <h1>搜索结果：flowers</h1>
+  <div class="results">
+    <!-- 山姆真实结构：价格被拆成「大字整数 + 小字角分」两个节点，
+         还单独渲染了一个上标 $。直接读容器文本会粘成 "$1998"，
+         只读第一个数字子节点又会丢掉角分（读成 19）。
+         销量 = 星级右边那个裸数字（6754）。
+         陷阱：卡片里还有一个 class 含 "star" 的 starting-price 容器
+         （ratingBoxes 会因为 "star" 命中它），它的拆分价格 12 / 34
+         绝不能被当成销量。 -->
+    <div class="sc-product-card">
+      <a href="https://www.samsclub.com/ip/red-roses-bouquet/98001111" aria-label="Red Roses Bouquet, 12 Stems">Red Roses Bouquet, 12 Stems</a>
+      <img src="https://scene7.samsclub.com/is/image/samsclub/0001111p?fmt=jpg" alt="Red Roses Bouquet">
+      <div class="sc-price-characteristic">
+        <span class="sc-price-superscript">$</span><span class="sc-price-integer">19</span><span class="sc-price-decimal">98</span>
+      </div>
+      <div class="sc-starting-price"><span class="dollars">$12</span><span class="cents">34</span></div>
+      <div class="sc-product-rating" data-testid="product-rating">
+        <div class="sc-star-rating" role="img" aria-label="4.6 out of 5 stars"><span>★★★★★</span></div>
+        <span class="sc-product-rating-count">6754</span>
+      </div>
+    </div>
+    <!-- 单节点完整价格 + 前面还有一个划线原价（原价也是拆分结构）：
+         不能把划线原价 $29.98 当成现价。
+         销量 = aria-label 里的 "1,234 ratings"（亚马逊那种写法）。 -->
+    <div class="sc-product-card">
+      <a href="https://www.samsclub.com/ip/white-lily-plant/98002222" aria-label="White Lily Potted Plant">White Lily Potted Plant</a>
+      <img src="https://scene7.samsclub.com/is/image/samsclub/0002222p?fmt=jpg" alt="White Lily">
+      <div class="sc-price-wasPrice"><span class="sc-price-superscript">$</span><span class="sc-price-integer">29</span><span class="sc-price-decimal">98</span></div>
+      <span class="sc-price">$24.98</span>
+      <div class="sc-product-rating">
+        <span class="a-icon-star" role="img" aria-label="4.2 out of 5 stars"></span>
+        <a href="#" aria-label="1,234 ratings">1,234</a>
+      </div>
+    </div>
+    <!-- 陷阱 1：页面确实没暴露价格。
+         陷阱 2：有星级但**没有评价数**，只有星级值 4.6 ——
+         4.6 是小数且没有 K/M 后缀，绝不能被当成「5 条销量」。 -->
+    <div class="sc-product-card">
+      <a href="https://www.samsclub.com/ip/orchid-pot/98003333" aria-label="Phalaenopsis Orchid Pot">Phalaenopsis Orchid Pot</a>
+      <img src="https://scene7.samsclub.com/is/image/samsclub/0003333p?fmt=jpg" alt="Orchid">
+      <span class="sc-price">无价格</span>
+      <div class="sc-product-rating"><span class="sc-star-rating">4.6</span></div>
+    </div>
+    <!-- 拆分价格的另一种写法：整数节点自带 $，且零件 class 不叫 integer/decimal。
+         销量 = "1.2K sold"（TikTok 那种写法）→ 1200。 -->
+    <div class="sc-product-card">
+      <a href="https://www.samsclub.com/ip/mixed-spring-bouquet/98004444" aria-label="Mixed Spring Bouquet">Mixed Spring Bouquet</a>
+      <img src="https://scene7.samsclub.com/is/image/samsclub/0004444p?fmt=jpg" alt="Mixed Spring">
+      <div class="sc-price-block"><span class="dollars">$16</span><span class="cents">48</span></div>
+      <div class="product-rating-line">
+        <span aria-label="1.2K sold">1.2K sold</span>
+      </div>
+    </div>
+  </div>
+  <p>合成搜索页，用于本地端到端测试列表采集。</p>
+</body>
+</html>

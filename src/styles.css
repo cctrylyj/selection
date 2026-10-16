@@ -1,0 +1,260 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: #f5f6f8;
+  color: #1f2329;
+}
+
+.app-shell {
+  min-height: 100%;
+}
+
+.brand {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2329;
+  border-bottom: 1px solid #f0f0f0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.app-header {
+  height: 56px;
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 0 24px;
+}
+
+.app-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.app-subtitle {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.app-content {
+  padding: 20px 24px 40px;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1180px;
+}
+
+.filter-bar {
+  row-gap: 12px;
+  margin-bottom: 12px;
+}
+
+.notice-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.notice-stack code {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  word-break: break-all;
+}
+
+.list-card {
+  margin-top: 0;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.muted {
+  color: #8c8c8c;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.cell-product {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.cell-channel-tag {
+  margin-inline-end: 0;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.stats-row {
+  display: flex;
+  gap: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-block {
+  padding: 40px 0 24px;
+}
+
+.menu-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- 采集 / 导入面板 ---- */
+
+.panel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.step-no {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #1677ff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.step-body {
+  min-width: 0;
+}
+
+.step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.bookmarklet-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px dashed #1677ff;
+  background: #e6f4ff;
+  color: #0958d9;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: grab;
+}
+
+.bookmarklet-btn:hover {
+  background: #bae0ff;
+}
+
+.collector-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #1677ff;
+  background: #1677ff;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.collector-download:hover {
+  background: #4096ff;
+}
+
+.tight-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.tight-list li {
+  margin: 2px 0;
+}
+
+.cell-desc {
+  font-size: 12px;
+  color: #8c8c8c;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* 价格是采集值，只读展示：等宽数字便于上下对齐比较 */
+.cell-price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: #d4380d;
+  cursor: default;
+  white-space: nowrap;
+}
+
+@media (max-width: 992px) {
+  .app-content {
+    padding: 14px;
+  }
+
+  .page {
+    max-width: 100%;
+  }
+}

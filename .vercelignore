@@ -1,0 +1,23 @@
+# 不要上传到 Vercel 的东西。
+# 用 Vercel CLI 部署时它会按本文件排除；从 Git 导入时由 .gitignore 负责。
+
+# 绝不能上传：.env 里有 SUPABASE_SERVICE_ROLE_KEY（等价于数据库管理员权限）
+.env
+.env.local
+.env.*.local
+
+node_modules
+dist
+.vercel
+.browser-profile
+
+# 本地端到端测试与合成页面，线上用不到
+_e2e
+
+# 另一个独立子项目，不属于本应用
+sams-club-scraper
+
+*.log
+npm-debug.log*
+.DS_Store
+tsconfig.*.tsbuildinfo

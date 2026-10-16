@@ -1,0 +1,53 @@
+{
+  "name": "sourcing-system",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "选品系统：产品信息查询（山姆 / 亚马逊 / TikTok Shop）+ 选品收藏，数据存 Supabase",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web,open -c blue,green,magenta \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:open\"",
+    "dev:api": "node --watch server/index.js",
+    "dev:web": "vite",
+    "dev:open": "node scripts/open-when-ready.mjs http://127.0.0.1:5173/",
+    "build": "tsc -b && vite build",
+    "start": "node server/index.js",
+    "start:chrome": "node scripts/open-when-ready.mjs http://127.0.0.1:5173/",
+    "preview": "npm run build && npm start",
+    "open:chrome": "node scripts/open-in-chrome.mjs",
+    "test": "node --test server/tests/*.test.js",
+    "vercel:dev": "npx vercel dev",
+    "deploy": "npx vercel --prod",
+    "deploy:preview": "npx vercel"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.5.2",
+    "@supabase/supabase-js": "^2.45.4",
+    "antd": "^5.22.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "optionalDependencies": {
+    "@esbuild/linux-x64": "^0.25.12",
+    "@esbuild/win32-x64": "^0.25.12",
+    "@rollup/rollup-linux-x64-gnu": "^4.64.7",
+    "@rollup/rollup-win32-x64-msvc": "^4.64.7"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}
