@@ -77,44 +77,57 @@ export default function ProductTable({
       title: "产品名称",
       dataIndex: "productName",
       key: "productName",
-      ellipsis: true,
-      sorter: (a, b) => a.productName.localeCompare(b.productName, "zh-Hans-CN"),
-      render: (value: string, row) => (
-        <span className="cell-product">
-          {row.productUrl ? (
-            <a href={row.productUrl} target="_blank" rel="noreferrer noopener">
-              {value || "—"}
-            </a>
-          ) : (
-            value || "—"
-          )}
-          {showChannelTag ? (
-            <Tag color={CHANNEL_COLOR[row.channel]} className="cell-channel-tag">
-              {CHANNEL_LABEL[row.channel]}
-            </Tag>
-          ) : null}
-          {row.description ? (
-            <Tooltip title={row.description} placement="topLeft">
-              <div className="cell-desc">{row.description.slice(0, 60)}</div>
-            </Tooltip>
-          ) : null}
-        </span>
-      ),
+      // 宽度固定 33%，超出部分省略号 + 悬浮显示完整名称（showTitle:false 关掉浏览器
+      // 原生 title，改用 antd Tooltip，样式统一、也能把采集到的描述一起带上）
+      width: "33%",
+      align: "center",
+      ellipsis: { showTitle: false },
+      render: (value: string, row) => {
+        const label = value || "—";
+        return (
+          <Tooltip
+            placement="topLeft"
+            title={
+              <span>
+                {label}
+                {row.description ? <div className="tooltip-desc">{row.description}</div> : null}
+              </span>
+            }
+          >
+            <span className="cell-product">
+              {row.productUrl ? (
+                <a href={row.productUrl} target="_blank" rel="noreferrer noopener">
+                  {label}
+                </a>
+              ) : (
+                <span>{label}</span>
+              )}
+              {showChannelTag ? (
+                <Tag color={CHANNEL_COLOR[row.channel]} className="cell-channel-tag">
+                  {CHANNEL_LABEL[row.channel]}
+                </Tag>
+              ) : null}
+            </span>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "产品类目",
       dataIndex: "category",
       key: "category",
-      width: 200,
+      width: 180,
+      align: "center",
       ellipsis: true,
-      sorter: (a, b) => a.category.localeCompare(b.category, "zh-Hans-CN"),
       render: (value: string) => value || "—",
     },
     {
       title: "产品价格",
       dataIndex: "price",
       key: "price",
-      width: 130,
+      width: 120,
+      align: "center",
+      // 只有价格和销量需要排序：名称/类目是文本，排序对选品没意义
       sorter: (a, b) => missingLast(a.price) - missingLast(b.price),
       // 只读展示：金额符号按采集到的币种跟在数字后面（19.98$ / 199.00¥ / 12.34€），
       // 采集值原样呈现，不提供编辑入口。
@@ -143,7 +156,7 @@ export default function ProductTable({
       dataIndex: "sales",
       key: "sales",
       width: 110,
-      align: "right",
+      align: "center",
       sorter: (a, b) => missingLast(a.sales) - missingLast(b.sales),
       render: (value: number | null | undefined) =>
         value === null || value === undefined ? (
@@ -158,16 +171,18 @@ export default function ProductTable({
       title: "图片",
       dataIndex: "imageUrl",
       key: "imageUrl",
-      width: 96,
+      // 120×120 缩略图，列宽留出边距，行高由图片撑开
+      width: 144,
+      align: "center",
       render: (value: string) =>
         value ? (
           <Image
             src={value}
             alt="商品图片"
-            width={56}
-            height={56}
-            style={{ objectFit: "cover", borderRadius: 6 }}
-            fallback="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Crect width='56' height='56' fill='%23f0f0f0'/%3E%3C/svg%3E"
+            width={120}
+            height={120}
+            style={{ objectFit: "cover", borderRadius: 8 }}
+            fallback="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Crect width='120' height='120' fill='%23f0f0f0'/%3E%3C/svg%3E"
           />
         ) : (
           <span className="muted">无图片</span>
@@ -176,7 +191,7 @@ export default function ProductTable({
     {
       title: "选择框",
       key: "select",
-      width: 80,
+      width: 90,
       align: "center",
       render: (_: unknown, row) => (
         <Checkbox
@@ -199,7 +214,7 @@ export default function ProductTable({
       columns={columns}
       dataSource={records}
       loading={loading}
-      scroll={{ x: 880 }}
+      scroll={{ x: 1000 }}
       size="middle"
       pagination={{
         current: page,

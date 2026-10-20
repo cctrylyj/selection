@@ -111,17 +111,37 @@ body {
   font-weight: 400;
 }
 
+/* 名称列：固定 33% 宽、单行省略、悬浮看完整名称（Tooltip 在组件里给） */
 .cell-product {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  min-width: 0;
   max-width: 100%;
+}
+
+.cell-product > a,
+.cell-product > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cell-channel-tag {
   margin-inline-end: 0;
   font-size: 11px;
   line-height: 16px;
+  flex: none;
+}
+
+/* 悬浮提示里的采集描述（Tooltip 是深色底，用浅灰字） */
+.tooltip-desc {
+  margin-top: 4px;
+  max-width: 340px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .stats-row {
@@ -253,6 +273,19 @@ body {
   font-weight: 500;
   color: #d4380d;
   cursor: default;
+  white-space: nowrap;
+}
+
+/* 销量：与产品名称同色（链接蓝），用浅蓝底胶囊保持醒目 */
+.cell-sales {
+  display: inline-block;
+  min-width: 56px;
+  padding: 1px 10px;
+  border-radius: 11px;
+  background: #e6f4ff;
+  color: #1677ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
