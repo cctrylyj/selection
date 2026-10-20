@@ -41,7 +41,7 @@ def main() -> int:
     before_ids = {x["id"] for x in before}
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="chrome", headless=False, args=["--disable-extensions"])
+        browser = p.chromium.launch(channel="chrome", headless=True, args=["--disable-extensions"])
         page = browser.new_context().new_page()
         page.goto(PAGE, wait_until="load")
         page.evaluate(
