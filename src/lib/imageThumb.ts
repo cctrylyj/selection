@@ -1,16 +1,26 @@
 /**
- * 把商品图变成可以塞进 Excel 单元格的小缩略图。
+ * 把商品图变成可以塞进 Excel 单元格的缩略图。
  *
  * 为什么要走 canvas 而不是直接用原始字节：
  *   1. CDN 上的图有 webp / avif，Excel 不认，canvas 统一转成 JPEG；
- *   2. 原图动辄上千像素，几十张塞进 xlsx 会让文件几十 MB，统一缩到 72px；
+ *   2. 原图动辄上千像素，几十张塞进 xlsx 会让文件几十 MB，统一缩到 200px；
  *   3. 顺带统一成正方形白底，表格里看着整齐。
  *
  * 图片由服务端 /api/proxy/image 代取（CDN 没有 CORS 头，浏览器直连拿不到字节）。
  */
 
-/** 单元格里图片的边长（像素），与 excel.ts 里的行高 60 磅配套 */
-export const THUMB_SIZE = 72;
+/**
+ * 单元格里图片的边长（像素）。
+ * 2026-10-20 用户要求从 72 改成 200：导出后要能看清商品图。
+ * 与之配套的是 excel.ts 的 imageRowHeight（156 磅 ≈ 208px）。
+ */
+export const THUMB_SIZE = 200;
+
+/**
+ * JPEG 质量。图放大到 200px 后单张会比 72px 大不少（约 3~4 倍），
+ * 60 张就是几 MB；0.8 在商品图上肉眼几乎看不出差别。
+ */
+const JPEG_QUALITY = 0.8;
 
 export interface Thumb {
   data: Uint8Array;
@@ -47,7 +57,7 @@ export async function fetchThumb(url: string, size = THUMB_SIZE): Promise<Thumb 
     bitmap.close?.();
 
     const jpeg = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.85)
+      canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY)
     );
     if (!jpeg) return null;
 

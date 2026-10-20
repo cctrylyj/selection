@@ -1,11 +1,33 @@
 import { CHANNEL_LABEL, type TableRow } from "../components/ProductTable";
 import { exportXlsx, fileStamp, type ExcelColumn, type ExcelImage } from "./excel";
-import { fetchThumbs } from "./imageThumb";
+import { fetchThumbs, THUMB_SIZE } from "./imageThumb";
+import { currencySymbol } from "./format";
+
+/**
+ * 价格的 Excel 数字格式码：0.00 后面跟币种单位，与页面列表的
+ * 「19.98$ / 199.00¥」完全一致。
+ *
+ * 用数字格式而不是拼成文本：单元格里仍存 19.98 这个数值，
+ * 排序、求和、筛选都还能用；只是显示成带单位的样子。
+ * 币种不在符号表里（如 AUD）时退回 `0.00" AUD"`，与 formatPrice 的行为对齐。
+ */
+function priceFormat(row: TableRow): string | null {
+  if (typeof row.price !== "number") return null; // 没价格的单元格不加格式
+  const code = (row.currency || "USD").toUpperCase();
+  const sym = currencySymbol(code);
+  // 格式码里的 $ 在部分环境会被当成格式占位符，必须用引号包成字面量
+  return sym ? `0.00"${sym}"` : `0.00" ${code}"`;
+}
 
 /**
  * 商品列表 → Excel 的列定义。
  * 与页面表格保持一致的字段顺序；「图片」列是真正的嵌入图（不是链接），
- * 缩略图由 imageThumb.ts 下载 + 转 JPEG + 缩到 72px 后写进 drawing。
+ * 缩略图由 imageThumb.ts 下载 + 转 JPEG + 缩到 200px 后写进 drawing。
+ *
+ * 2026-10-20 按用户要求调整：
+ *   - 去掉「币种」列，单位跟到价格后面（与列表展示一致，不用横向对照两列）
+ *   - 去掉「商品链接」列（链接又长又没阅读价值，还会让图片列被文字挤花）
+ *   - 图片尺寸 72 → 200
  */
 const PRODUCT_COLUMNS: ExcelColumn<TableRow>[] = [
   {
@@ -25,15 +47,11 @@ const PRODUCT_COLUMNS: ExcelColumn<TableRow>[] = [
   },
   {
     header: "产品价格",
-    width: 12,
-    format: "money",
+    // 单位跟在数字后面会多占几个字符，列宽比原来略宽
+    width: 14,
     // 价格缺失时留空单元格，不要写 0，否则会被当成「免费」
     value: (r) => (typeof r.price === "number" ? r.price : null),
-  },
-  {
-    header: "币种",
-    width: 9,
-    value: (r) => (r.currency || "USD").toUpperCase(),
+    numberFormat: priceFormat,
   },
   {
     header: "销量/评价数",
@@ -42,13 +60,9 @@ const PRODUCT_COLUMNS: ExcelColumn<TableRow>[] = [
     value: (r) => (typeof r.sales === "number" ? r.sales : null),
   },
   {
-    header: "商品链接",
-    width: 52,
-    value: (r) => r.productUrl || "",
-  },
-  {
     header: "图片",
-    width: 12,
+    // 200px 图约合 21 个字符宽（1 字符 ≈ 9.6px）
+    width: 23,
     // 图片走 drawing 锚定，单元格本身留空
     value: () => null,
   },
@@ -112,6 +126,8 @@ export async function exportProductsToExcel(
     columns: PRODUCT_COLUMNS,
     rows,
     images,
+    // 行高跟图片尺寸配套：200px 的图需要约 156 磅行高，否则会被裁切
+    imageRowHeight: Math.ceil((THUMB_SIZE + 8) * 0.75),
   });
 
   return { rows: rows.length, images: images.length, failed };

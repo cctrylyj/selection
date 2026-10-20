@@ -17,6 +17,16 @@ export interface ExcelColumn<T> {
   value: (row: T) => CellValue;
   /** money → 0.00；int → 千分位 #,##0 */
   format?: "money" | "int";
+  /**
+   * 自定义数字格式码，如 `0.00"$"`。优先于 format。
+   * 按行返回，因此同一列可以按币种显示不同单位（19.98$ / 199.00¥）。
+   * 返回 null / undefined 时该单元格不加格式。
+   *
+   * 为什么用数字格式而不是把 "19.98$" 当文本写进去：
+   * 文本会让这一列失去排序、求和、筛选的数值能力；数字格式只改显示，
+   * 单元格里仍是 19.98，与页面上「符号跟在数字后面」的样式完全一致。
+   */
+  numberFormat?: (row: T) => string | null | undefined;
 }
 
 /**
@@ -43,6 +53,10 @@ const S_TEXT = 0;
 const S_HEADER = 1;
 const S_MONEY = 2;
 const S_INT = 3;
+/** 自定义数字格式的 xf 从这里往后排 */
+const S_FIRST_CUSTOM = 4;
+/** 自定义 numFmtId 从 164 起（164 以内是 Excel 内置格式，不能占用） */
+const NUMFMT_ID_BASE = 164;
 
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -176,11 +190,61 @@ function colName(index: number): string {
   return name;
 }
 
+/* ---------------- 自定义数字格式登记表 ---------------- */
+
+/**
+ * 收集用到的自定义格式码，分配 xf 索引与 numFmtId。
+ * 同一个格式码只登记一次（一列几十行通常只有 1~2 种币种）。
+ */
+class FormatRegistry {
+  private readonly codes: string[] = [];
+  private readonly index = new Map<string, number>();
+
+  /** 传入格式码，返回可写进 `s="..."` 的样式索引 */
+  styleOf(code: string): number {
+    const hit = this.index.get(code);
+    if (hit !== undefined) return hit;
+    const next = S_FIRST_CUSTOM + this.codes.length;
+    this.codes.push(code);
+    this.index.set(code, next);
+    return next;
+  }
+
+  /** 生成 `<numFmts>` 片段；没有自定义格式时返回空串 */
+  numFmtsXml(): string {
+    if (!this.codes.length) return "";
+    const items = this.codes
+      .map(
+        (code, i) =>
+          `<numFmt numFmtId="${NUMFMT_ID_BASE + i}" formatCode="${esc(code)}"/>`
+      )
+      .join("");
+    return `<numFmts count="${this.codes.length}">${items}</numFmts>`;
+  }
+
+  /** 生成额外的 `<xf>`（沿用 S_MONEY 的字体/边框，只换数字格式） */
+  extraXfsXml(): string {
+    return this.codes
+      .map(
+        (_, i) =>
+          `<xf numFmtId="${NUMFMT_ID_BASE + i}" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>`
+      )
+      .join("");
+  }
+
+  get count(): number {
+    return this.codes.length;
+  }
+}
+
 /* ---------------- sheet / workbook / styles ---------------- */
-function cellXml(ref: string, value: CellValue, format?: "money" | "int"): string {
+function cellXml(
+  ref: string,
+  value: CellValue,
+  style: number
+): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "number" && Number.isFinite(value)) {
-    const style = format === "money" ? S_MONEY : format === "int" ? S_INT : S_TEXT;
     return `<c r="${ref}" s="${style}"><v>${value}</v></c>`;
   }
   const text = String(value);
@@ -188,11 +252,21 @@ function cellXml(ref: string, value: CellValue, format?: "money" | "int"): strin
   return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(text)}</t></is></c>`;
 }
 
+/** 某行某列的样式索引：自定义格式优先，其次 money / int，最后默认 */
+function styleFor<T>(col: ExcelColumn<T>, row: T, formats: FormatRegistry): number {
+  const custom = col.numberFormat?.(row);
+  if (custom) return formats.styleOf(custom);
+  if (col.format === "money") return S_MONEY;
+  if (col.format === "int") return S_INT;
+  return S_TEXT;
+}
+
 function sheetXml<T>(
   columns: ExcelColumn<T>[],
   rows: T[],
   images: ExcelImage[],
-  imageRowHeight: number
+  imageRowHeight: number,
+  formats: FormatRegistry
 ): string {
   const lastCol = colName(columns.length - 1);
   const cols = columns
@@ -216,7 +290,7 @@ function sheetXml<T>(
         ? ` ht="${imageRowHeight}" customHeight="1"`
         : "";
       const cells = columns
-        .map((c, i) => cellXml(`${colName(i)}${rowNo}`, c.value(row), c.format))
+        .map((c, i) => cellXml(`${colName(i)}${rowNo}`, c.value(row), styleFor(c, row, formats)))
         .join("");
       return `<row r="${rowNo}"${tall}>${cells}</row>`;
     })
@@ -292,8 +366,12 @@ function workbookXml(sheetName: string): string {
 </workbook>`;
 }
 
-const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+function stylesXml(formats: FormatRegistry): string {
+  // cellXfs 里前 4 个是固定样式，后面按需追加自定义数字格式的 xf
+  const totalXfs = S_FIRST_CUSTOM + formats.count;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+${formats.numFmtsXml()}
 <fonts count="2">
 <font><sz val="11"/><color theme="1"/><name val="\u7b49\u7ebf"/></font>
 <font><b/><sz val="11"/><color theme="1"/><name val="\u7b49\u7ebf"/></font>
@@ -305,14 +383,16 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="4">
+<cellXfs count="${totalXfs}">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center" horizontal="center"/></xf>
 <xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+${formats.extraXfsXml()}
 </cellXfs>
 <cellStyles count="1"><cellStyle name="\u5e38\u89c4" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
+}
 
 function contentTypesXml(hasImages: boolean): string {
   // 没有图片时不要声明 drawing / 图片类型，保持包体最小、也避免部分阅读器报警告
@@ -364,7 +444,7 @@ export interface ExportOptions<T> {
   rows: T[];
   /** 要嵌进单元格的图片（商品图缩略图） */
   images?: ExcelImage[];
-  /** 有图的行高（磅），默认 60（约 80px，刚好放下 72px 的缩略图） */
+  /** 有图的行高（磅），默认 156（约 208px，刚好放下 200px 的图） */
   imageRowHeight?: number;
 }
 
@@ -375,20 +455,29 @@ export function exportXlsx<T>({
   columns,
   rows,
   images = [],
-  imageRowHeight = 60,
+  imageRowHeight = 156,
 }: ExportOptions<T>): void {
   const encoder = new TextEncoder();
   const safeSheet = sheetName.replace(/[:\\/?*[\]]/g, " ").slice(0, 31) || "Sheet1";
+
+  // 先扫一遍行，把用到的自定义数字格式登记好，styles.xml 才能一次写对
+  const formats = new FormatRegistry();
+  rows.forEach((row) => {
+    columns.forEach((col) => {
+      const code = col.numberFormat?.(row);
+      if (code) formats.styleOf(code);
+    });
+  });
 
   const files: ZipEntry[] = [
     { name: "[Content_Types].xml", data: encoder.encode(contentTypesXml(images.length > 0)) },
     { name: "_rels/.rels", data: encoder.encode(ROOT_RELS_XML) },
     { name: "xl/workbook.xml", data: encoder.encode(workbookXml(safeSheet)) },
     { name: "xl/_rels/workbook.xml.rels", data: encoder.encode(WORKBOOK_RELS_XML) },
-    { name: "xl/styles.xml", data: encoder.encode(STYLES_XML) },
+    { name: "xl/styles.xml", data: encoder.encode(stylesXml(formats)) },
     {
       name: "xl/worksheets/sheet1.xml",
-      data: encoder.encode(sheetXml(columns, rows, images, imageRowHeight)),
+      data: encoder.encode(sheetXml(columns, rows, images, imageRowHeight, formats)),
     },
   ];
 
