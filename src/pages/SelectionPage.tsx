@@ -1,11 +1,12 @@
-import { Alert, Button, Card, Empty, Popconfirm, Statistic, message } from "antd";
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Empty, Popconfirm, Statistic, Tooltip, message } from "antd";
+import { DeleteOutlined, DownloadOutlined, PlusOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import ProductTable, { type TableRow } from "../components/ProductTable";
 import { api } from "../api";
 import { selectionBus } from "../lib/bus";
+import { exportProductsToExcel } from "../lib/productExport";
 import type { SelectionItem } from "../types";
 
 function toRow(item: SelectionItem): TableRow {
@@ -91,6 +92,23 @@ export default function SelectionPage() {
     }
   };
 
+  /** 导出 Excel：勾选了只导勾选项，没勾选导全部选品 */
+  const exportExcel = () => {
+    const chosen = selectedKeys.length
+      ? records.filter((r) => selectedKeys.includes(r.key))
+      : records;
+    if (!chosen.length) {
+      message.warning("选品列表为空，没有可导出的数据");
+      return;
+    }
+    try {
+      exportProductsToExcel(chosen, "选品列表");
+      message.success(`已导出 ${chosen.length} 项到 Excel`);
+    } catch (e) {
+      message.error((e as Error).message || "导出失败");
+    }
+  };
+
   return (
     <div className="page">
       <Card
@@ -152,14 +170,27 @@ export default function SelectionPage() {
             </span>
           }
           extra={
-            <Button
-              danger
-              icon={<DeleteOutlined />}
-              disabled={!selectedKeys.length}
-              onClick={removeSelected}
-            >
-              移除（已选 {selectedKeys.length}）
-            </Button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Tooltip
+                title={
+                  selectedKeys.length
+                    ? `只导出勾选的 ${selectedKeys.length} 项`
+                    : `未勾选，将导出全部 ${records.length} 项`
+                }
+              >
+                <Button icon={<DownloadOutlined />} disabled={!records.length} onClick={exportExcel}>
+                  导出 Excel{selectedKeys.length ? `（已选 ${selectedKeys.length}）` : ""}
+                </Button>
+              </Tooltip>
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                disabled={!selectedKeys.length}
+                onClick={removeSelected}
+              >
+                移除（已选 {selectedKeys.length}）
+              </Button>
+            </div>
           }
         >
           <ProductTable

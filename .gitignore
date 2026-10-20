@@ -25,3 +25,6 @@ _e2e/_*
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# 工作区记忆/临时数据（WorkBuddy 本地目录，不入库）
+.workbuddy-ai/

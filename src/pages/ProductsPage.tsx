@@ -1,12 +1,19 @@
-import { Alert, Button, Card, Form, Input, Popconfirm, Space, Tabs, message, Select } from "antd";
+import { Alert, Button, Card, Form, Input, Popconfirm, Space, Tabs, Tooltip, message, Select } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DeleteOutlined, ReloadOutlined, SearchOutlined, StarOutlined } from "@ant-design/icons";
+import {
+  DeleteOutlined,
+  DownloadOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  StarOutlined,
+} from "@ant-design/icons";
 
 import ProductTable, { type TableRow } from "../components/ProductTable";
 import BookmarkletPanel from "../components/BookmarkletPanel";
 import ImportPanel from "../components/ImportPanel";
 import { api } from "../api";
 import { selectionBus } from "../lib/bus";
+import { exportProductsToExcel } from "../lib/productExport";
 import type { ChannelId, ChannelInfo, CollectedItem, Product } from "../types";
 
 const PLACEHOLDER: Record<ChannelId, string> = {
@@ -191,6 +198,26 @@ export default function ProductsPage() {
       setSelectedKeys([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * 导出 Excel：勾选了就只导勾选项，没勾选导全部。
+   * 直接生成真 .xlsx（零依赖实现，见 lib/excel.ts），Excel / WPS 都能直接打开。
+   */
+  const exportExcel = () => {
+    const chosen = selectedKeys.length
+      ? records.filter((r) => selectedKeys.includes(r.key))
+      : records;
+    if (!chosen.length) {
+      message.warning("商品列表为空，没有可导出的数据");
+      return;
+    }
+    try {
+      exportProductsToExcel(chosen, "商品列表");
+      message.success(`已导出 ${chosen.length} 项到 Excel`);
+    } catch (e) {
+      message.error((e as Error).message || "导出失败");
     }
   };
 
@@ -379,6 +406,19 @@ export default function ProductsPage() {
         }
         extra={
           <Space>
+            <Tooltip
+              title={
+                selectedKeys.length
+                  ? `只导出勾选的 ${selectedKeys.length} 项`
+                  : records.length
+                    ? `未勾选，将导出全部 ${records.length} 项`
+                    : "列表为空"
+              }
+            >
+              <Button icon={<DownloadOutlined />} disabled={!records.length} onClick={exportExcel}>
+                导出 Excel{selectedKeys.length ? `（已选 ${selectedKeys.length}）` : ""}
+              </Button>
+            </Tooltip>
             <Popconfirm
               title="确认删除选中商品？"
               description={`将删除 ${selectedKeys.length} 项，此操作不可恢复`}
