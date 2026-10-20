@@ -1,5 +1,6 @@
-import { Checkbox, Empty, Image, Table, Tag, Tooltip } from "antd";
+import { Button, Checkbox, Empty, Image, Table, Tag, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { useEffect, useState } from "react";
 import type { ChannelId } from "../types";
 import { formatCount, formatPrice } from "../lib/format";
 
@@ -41,6 +42,10 @@ interface Props {
   loading?: boolean;
   /** 选品页在名称下加渠道角标，便于区分来源；产品信息页不需要 */
   showChannelTag?: boolean;
+  /** 每页条数可选项，默认 10 / 20 / 50 */
+  pageSizeOptions?: number[];
+  /** 默认每页条数，默认 10 */
+  defaultPageSize?: number;
 }
 
 /** 产品信息页与选品页共用：列完全一致（产品名称 / 产品类目 / 产品价格 / 图片 / 选择框） */
@@ -50,9 +55,18 @@ export default function ProductTable({
   onSelectionChange,
   loading = false,
   showChannelTag = false,
+  pageSizeOptions = [10, 20, 50],
+  defaultPageSize = 10,
 }: Props) {
   const selected = new Set(selectedKeys);
-  const allChecked = records.length > 0 && records.every((r) => selected.has(r.key));
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(defaultPageSize);
+
+  // 删除 / 清空后当前页可能超出范围，拉回最后一页，避免停在空白页
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(records.length / pageSize));
+    if (page > maxPage) setPage(maxPage);
+  }, [records.length, pageSize, page]);
 
   // 排序时把「没有值」的行排在最后：升序/降序都当它是最小值处理，
   // 这样按销量降序时不会因为一堆 null 把真数据挤下去。
@@ -185,26 +199,72 @@ export default function ProductTable({
       columns={columns}
       dataSource={records}
       loading={loading}
-      pagination={false}
       scroll={{ x: 880 }}
       size="middle"
-      rowSelection={undefined}
-      title={() => (
-        <div className="table-toolbar">
-          <Checkbox
-            checked={allChecked}
-            indeterminate={!allChecked && selectedKeys.length > 0}
-            onChange={(e) =>
-              onSelectionChange(e.target.checked ? records.map((r) => r.key) : [])
-            }
-          >
-            全选
-          </Checkbox>
-          <span className="muted">
-            已选 <b>{selectedKeys.length}</b> 项 / 共 {records.length} 项
-          </span>
-        </div>
-      )}
+      pagination={{
+        current: page,
+        pageSize,
+        total: records.length,
+        // 分页器给全：每页条数、快速跳页、总数范围、首末页
+        showSizeChanger: true,
+        showQuickJumper: true,
+        pageSizeOptions: pageSizeOptions.map(String),
+        showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条 / 共 ${total} 条`,
+        onChange: (nextPage, nextSize) => {
+          // antd 在切换每页条数时也会走 onChange，此时回到第 1 页
+          if (nextSize !== pageSize) {
+            setPageSize(nextSize);
+            setPage(1);
+          } else {
+            setPage(nextPage);
+          }
+        },
+      }}
+      title={(pageRows) => {
+        // 分页后「全选」只作用于当前页，跨页全选单独给一个入口，避免误删
+        const pageKeys = pageRows.map((r) => r.key);
+        const pageAllChecked = pageKeys.length > 0 && pageKeys.every((k) => selected.has(k));
+        const pageSomeChecked = pageKeys.some((k) => selected.has(k));
+
+        const togglePage = (checked: boolean) => {
+          if (checked) {
+            onSelectionChange(Array.from(new Set([...selectedKeys, ...pageKeys])));
+          } else {
+            const drop = new Set(pageKeys);
+            onSelectionChange(selectedKeys.filter((k) => !drop.has(k)));
+          }
+        };
+
+        return (
+          <div className="table-toolbar">
+            <div className="toolbar-left">
+              <Checkbox
+                checked={pageAllChecked}
+                indeterminate={!pageAllChecked && pageSomeChecked}
+                onChange={(e) => togglePage(e.target.checked)}
+              >
+                全选本页
+              </Checkbox>
+              {selectedKeys.length ? (
+                <Button type="link" size="small" onClick={() => onSelectionChange([])}>
+                  清空勾选
+                </Button>
+              ) : records.length > pageSize ? (
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => onSelectionChange(records.map((r) => r.key))}
+                >
+                  全选全部 {records.length} 项
+                </Button>
+              ) : null}
+            </div>
+            <span className="muted">
+              已选 <b>{selectedKeys.length}</b> 项 / 共 {records.length} 项
+            </span>
+          </div>
+        );
+      }}
       locale={{
         emptyText: loading ? "加载中…" : <Empty description="暂无数据" />,
       }}

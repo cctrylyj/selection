@@ -425,7 +425,7 @@ export default function ProductsPage() {
                 selectedKeys.length
                   ? `只导出勾选的 ${selectedKeys.length} 项（含商品图）`
                   : records.length
-                    ? `未勾选，将导出全部 ${records.length} 项（含商品图）`
+                    ? `未勾选，默认导出全部 ${records.length} 项（含所有分页，不只是当前页）`
                     : "列表为空"
               }
             >
