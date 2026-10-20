@@ -18,6 +18,7 @@ import express from "express";
 
 import productsRoutes from "./routes/products.js";
 import selectionRoutes from "./routes/selection.js";
+import imageRoutes from "./routes/image.js";
 import { pingDb } from "./db.js";
 import { inboxBackend } from "./lib/inboxStore.js";
 import { AppError } from "./lib/errors.js";
@@ -60,6 +61,8 @@ export function createApp() {
 
   app.use("/api/products", productsRoutes);
   app.use("/api/selection", selectionRoutes);
+  // 图片代理：Excel 导出要把商品图真正嵌进单元格，而 CDN 没有 CORS 头
+  app.use("/api/proxy/image", imageRoutes);
 
   // 未匹配的 /api/* 一律返回 JSON 404，别把 Express 默认的 HTML 错误页返给前端
   app.use("/api", (req, res) => {

@@ -30,6 +30,7 @@ export default function SelectionPage() {
   const [items, setItems] = useState<SelectionItem[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -92,8 +93,8 @@ export default function SelectionPage() {
     }
   };
 
-  /** 导出 Excel：勾选了只导勾选项，没勾选导全部选品 */
-  const exportExcel = () => {
+  /** 导出 Excel：勾选了只导勾选项，没勾选导全部选品；商品图嵌进单元格 */
+  const exportExcel = async () => {
     const chosen = selectedKeys.length
       ? records.filter((r) => selectedKeys.includes(r.key))
       : records;
@@ -101,11 +102,24 @@ export default function SelectionPage() {
       message.warning("选品列表为空，没有可导出的数据");
       return;
     }
+    const key = "export-excel";
+    setExporting(true);
+    message.loading({ content: `正在下载 ${chosen.length} 张商品图…`, key, duration: 0 });
     try {
-      exportProductsToExcel(chosen, "选品列表");
-      message.success(`已导出 ${chosen.length} 项到 Excel`);
+      const res = await exportProductsToExcel(chosen, "选品列表", {
+        onProgress: (done, total) =>
+          message.loading({ content: `正在下载商品图 ${done}/${total}…`, key, duration: 0 }),
+      });
+      message.success({
+        key,
+        content:
+          `已导出 ${res.rows} 项，嵌入 ${res.images} 张图片`
+          + (res.failed ? `，${res.failed} 张图片下载失败已留空` : ""),
+      });
     } catch (e) {
-      message.error((e as Error).message || "导出失败");
+      message.error({ key, content: (e as Error).message || "导出失败" });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -178,7 +192,12 @@ export default function SelectionPage() {
                     : `未勾选，将导出全部 ${records.length} 项`
                 }
               >
-                <Button icon={<DownloadOutlined />} disabled={!records.length} onClick={exportExcel}>
+                <Button
+                  icon={<DownloadOutlined />}
+                  disabled={!records.length}
+                  loading={exporting}
+                  onClick={exportExcel}
+                >
                   导出 Excel{selectedKeys.length ? `（已选 ${selectedKeys.length}）` : ""}
                 </Button>
               </Tooltip>

@@ -19,6 +19,25 @@ export interface ExcelColumn<T> {
   format?: "money" | "int";
 }
 
+/**
+ * 嵌进单元格的图片。
+ * 坐标都是 0-based，row 含表头（表头是第 0 行，第一条数据是第 1 行）。
+ * Excel 用 oneCellAnchor 把图「钉」在某个单元格上，行高不够会被裁切，
+ * 所以有图的行会自动加高（见 ExportOptions.imageRowHeight）。
+ */
+export interface ExcelImage {
+  col: number;
+  row: number;
+  data: Uint8Array;
+  extension: "png" | "jpeg";
+  /** 显示尺寸（像素） */
+  width: number;
+  height: number;
+  /** 距单元格左上角的偏移（像素），默认 4 */
+  offsetX?: number;
+  offsetY?: number;
+}
+
 /* ---------------- 样式索引（对应 styles.xml 里 cellXfs 的顺序） ---------------- */
 const S_TEXT = 0;
 const S_HEADER = 1;
@@ -169,7 +188,12 @@ function cellXml(ref: string, value: CellValue, format?: "money" | "int"): strin
   return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(text)}</t></is></c>`;
 }
 
-function sheetXml<T>(columns: ExcelColumn<T>[], rows: T[]): string {
+function sheetXml<T>(
+  columns: ExcelColumn<T>[],
+  rows: T[],
+  images: ExcelImage[],
+  imageRowHeight: number
+): string {
   const lastCol = colName(columns.length - 1);
   const cols = columns
     .map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.width ?? 16}" customWidth="1"/>`)
@@ -182,27 +206,84 @@ function sheetXml<T>(columns: ExcelColumn<T>[], rows: T[]): string {
       .join("") +
     "</row>";
 
+  // 有图的行走高一点，否则图片会被行高裁掉
+  const rowsWithImage = new Set(images.map((img) => img.row));
+
   const body = rows
     .map((row, r) => {
       const rowNo = r + 2;
+      const tall = rowsWithImage.has(rowNo - 1)
+        ? ` ht="${imageRowHeight}" customHeight="1"`
+        : "";
       const cells = columns
         .map((c, i) => cellXml(`${colName(i)}${rowNo}`, c.value(row), c.format))
         .join("");
-      return `<row r="${rowNo}">${cells}</row>`;
+      return `<row r="${rowNo}"${tall}>${cells}</row>`;
     })
     .join("");
 
   const lastRow = rows.length + 1;
+  const drawing = images.length ? '\n<drawing r:id="rId1"/>' : "";
+  const rootNs = images.length
+    ? ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    : "";
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"${rootNs}>
 <sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="16"/>
 <cols>${cols}</cols>
 <sheetData>${header}${body}</sheetData>
-<autoFilter ref="A1:${lastCol}${lastRow}"/>
+<autoFilter ref="A1:${lastCol}${lastRow}"/>${drawing}
 </worksheet>`;
 }
+
+/* ---------------- 图片（drawing） ---------------- */
+
+/** Excel 的长度单位是 EMU：1 像素 = 9525 EMU */
+const EMU_PER_PX = 9525;
+
+function drawingXml(images: ExcelImage[]): string {
+  const anchors = images
+    .map((img, i) => {
+      const cx = Math.round(img.width * EMU_PER_PX);
+      const cy = Math.round(img.height * EMU_PER_PX);
+      const offX = Math.round((img.offsetX ?? 4) * EMU_PER_PX);
+      const offY = Math.round((img.offsetY ?? 4) * EMU_PER_PX);
+      return `<xdr:oneCellAnchor>`
+        + `<xdr:from><xdr:col>${img.col}</xdr:col><xdr:colOff>${offX}</xdr:colOff>`
+        + `<xdr:row>${img.row}</xdr:row><xdr:rowOff>${offY}</xdr:rowOff></xdr:from>`
+        + `<xdr:ext cx="${cx}" cy="${cy}"/>`
+        + `<xdr:pic><xdr:nvPicPr>`
+        + `<xdr:cNvPr id="${i + 2}" name="Picture ${i + 1}"/>`
+        + `<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>`
+        + `</xdr:nvPicPr>`
+        + `<xdr:blipFill><a:blip r:embed="rId${i + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>`
+        + `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`
+        + `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>`
+        + `</xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${anchors}</xdr:wsDr>`;
+}
+
+function drawingRelsXml(images: ExcelImage[]): string {
+  const rels = images
+    .map(
+      (img, i) =>
+        `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image${i + 1}.${img.extension}"/>`
+    )
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`;
+}
+
+const SHEET_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>
+</Relationships>`;
 
 function workbookXml(sheetName: string): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -233,14 +314,24 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cellStyles count="1"><cellStyle name="\u5e38\u89c4" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-const CONTENT_TYPES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+function contentTypesXml(hasImages: boolean): string {
+  // 没有图片时不要声明 drawing / 图片类型，保持包体最小、也避免部分阅读器报警告
+  const imageDefaults = hasImages
+    ? '\n<Default Extension="png" ContentType="image/png"/>'
+      + '\n<Default Extension="jpeg" ContentType="image/jpeg"/>'
+    : "";
+  const drawingOverride = hasImages
+    ? '\n<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>'
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="xml" ContentType="application/xml"/>${imageDefaults}
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
 <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${drawingOverride}
 </Types>`;
+}
 
 const ROOT_RELS_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -271,21 +362,46 @@ export interface ExportOptions<T> {
   sheetName?: string;
   columns: ExcelColumn<T>[];
   rows: T[];
+  /** 要嵌进单元格的图片（商品图缩略图） */
+  images?: ExcelImage[];
+  /** 有图的行高（磅），默认 60（约 80px，刚好放下 72px 的缩略图） */
+  imageRowHeight?: number;
 }
 
 /** 生成并直接触发浏览器下载 */
-export function exportXlsx<T>({ filename, sheetName = "Sheet1", columns, rows }: ExportOptions<T>): void {
+export function exportXlsx<T>({
+  filename,
+  sheetName = "Sheet1",
+  columns,
+  rows,
+  images = [],
+  imageRowHeight = 60,
+}: ExportOptions<T>): void {
   const encoder = new TextEncoder();
   const safeSheet = sheetName.replace(/[:\\/?*[\]]/g, " ").slice(0, 31) || "Sheet1";
 
   const files: ZipEntry[] = [
-    { name: "[Content_Types].xml", data: encoder.encode(CONTENT_TYPES_XML) },
+    { name: "[Content_Types].xml", data: encoder.encode(contentTypesXml(images.length > 0)) },
     { name: "_rels/.rels", data: encoder.encode(ROOT_RELS_XML) },
     { name: "xl/workbook.xml", data: encoder.encode(workbookXml(safeSheet)) },
     { name: "xl/_rels/workbook.xml.rels", data: encoder.encode(WORKBOOK_RELS_XML) },
     { name: "xl/styles.xml", data: encoder.encode(STYLES_XML) },
-    { name: "xl/worksheets/sheet1.xml", data: encoder.encode(sheetXml(columns, rows)) },
+    {
+      name: "xl/worksheets/sheet1.xml",
+      data: encoder.encode(sheetXml(columns, rows, images, imageRowHeight)),
+    },
   ];
+
+  if (images.length) {
+    files.push(
+      { name: "xl/worksheets/_rels/sheet1.xml.rels", data: encoder.encode(SHEET_RELS_XML) },
+      { name: "xl/drawings/drawing1.xml", data: encoder.encode(drawingXml(images)) },
+      { name: "xl/drawings/_rels/drawing1.xml.rels", data: encoder.encode(drawingRelsXml(images)) }
+    );
+    images.forEach((img, i) => {
+      files.push({ name: `xl/media/image${i + 1}.${img.extension}`, data: img.data });
+    });
+  }
 
   const bytes = zipStore(files);
   // 拷贝到独立的 ArrayBuffer 再交给 Blob：TS 5.7 起 Uint8Array 带 buffer 泛型，
