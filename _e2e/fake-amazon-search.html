@@ -1,0 +1,81 @@
+<!doctype html>
+<!--
+  亚马逊搜索结果页 fixture（按 2026-10 中文站点结构复刻）。
+  用途：验证采集器在 amazon.com/s?k=xxx 上能逐个卡片解析，而不是把页面标题当商品。
+
+  覆盖的坑：
+    1. 卡片是 div[data-component-type="s-search-result"][data-asin]
+    2. 现价与划线原价并存（.a-price 与 .a-price.a-text-price），只能取现价
+    3. 价格可能是全角 ￥（人民币）或 $（美元）
+    4. 评价数在 a[href*=customerReviews] 里，中文 aria-label 是「4.6 星，5000 条评价」
+    5. 有的卡片没有评价链接，只能从「过去一个月购买了 N 件商品」取销量
+    6. 广告位 data-asin="" 必须跳过
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Amazon.com: Flowers - $5 To $25</title>
+</head>
+<body>
+  <div id="search">
+    <!-- 1) 中文站，全角￥，带划线原价，评价数 5K -->
+    <div data-component-type="s-search-result" data-asin="B0TEST0001">
+      <div class="s-product-image-container">
+        <img class="s-image" src="https://cdn.example.com/rose.jpg" alt="Lifewit 秋季人造花卉" />
+      </div>
+      <h2><a href="https://www.amazon.com/dp/B0TEST0001/ref=sr_1_1?keywords=flowers"><span>Lifewit 秋季人造花卉，适用于户外，仿真花卉 12 支装</span></a></h2>
+      <div class="a-row">
+        <span class="a-icon-alt">4.6 星</span>
+        <a href="https://www.amazon.com/product-reviews/B0TEST0001#customerReviews" aria-label="4.6 星，5000 条评价">
+          <span class="a-size-base">5K</span>
+        </a>
+      </div>
+      <div><span>过去一个月购买了700多件商品</span></div>
+      <div class="a-row">
+        <span class="a-price a-text-price"><span class="a-offscreen">￥199.99</span></span>
+        <span class="a-price">
+          <span class="a-offscreen">￥169.99</span>
+          <span class="a-price-symbol">￥</span>
+          <span class="a-price-whole">169<span class="a-price-decimal">.</span></span>
+          <span class="a-price-fraction">99</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- 2) 美元价，没有评价链接，销量只能从「购买了 1.2K 件」取 -->
+    <div data-component-type="s-search-result" data-asin="B0TEST0002">
+      <img class="s-image" src="https://cdn.example.com/lily.jpg" alt="" />
+      <h2><a href="https://www.amazon.com/dp/B0TEST0002/ref=sr_1_2?keywords=flowers"><span>RECUTMS 人造秋菊花，不掉色，仿真假花装饰</span></a></h2>
+      <div><span>过去一个月购买了 1.2K 件商品</span></div>
+      <div class="a-row">
+        <span class="a-price"><span class="a-offscreen">$15.99</span><span class="a-price-whole">15</span><span class="a-price-fraction">99</span></span>
+      </div>
+    </div>
+
+    <!-- 3) 美元价带 "US$" 前缀，评价数 300 -->
+    <div data-component-type="s-search-result" data-asin="B0TEST0003">
+      <img class="s-image" src="https://cdn.example.com/wreath.jpg" alt="" />
+      <h2><a href="https://www.amazon.com/dp/B0TEST0003/ref=sr_1_3"><span>人造悬挂花环，适合春夏户外装饰</span></a></h2>
+      <a href="https://www.amazon.com/product-reviews/B0TEST0003#customerReviews" aria-label="4.5 星，300 条评价"><span>300</span></a>
+      <div class="a-row">
+        <span class="a-price"><span class="a-offscreen">US$23.99</span></span>
+      </div>
+    </div>
+
+    <!-- 4) 无价格（暂不可售），但有评价数 800 -->
+    <div data-component-type="s-search-result" data-asin="B0TEST0004">
+      <img class="s-image" src="https://cdn.example.com/peony.jpg" alt="" />
+      <h2><a href="https://www.amazon.com/dp/B0TEST0004/ref=sr_1_4"><span>仿真牡丹花束，婚礼装饰用</span></a></h2>
+      <a href="https://www.amazon.com/product-reviews/B0TEST0004#customerReviews" aria-label="4.4 星，800 条评价"><span>800</span></a>
+      <div class="a-row"><span>当前无法配送</span></div>
+    </div>
+
+    <!-- 5) 广告位：data-asin 为空，必须跳过 -->
+    <div data-component-type="s-search-result" data-asin="">
+      <img class="s-image" src="https://cdn.example.com/ad.jpg" alt="" />
+      <h2><a href="https://www.amazon.com/dp/B0ADAD0001/ref=sr_1_5"><span>广告位商品不应该被采集</span></a></h2>
+      <div class="a-row"><span class="a-price"><span class="a-offscreen">$9.99</span></span></div>
+    </div>
+  </div>
+</body>
+</html>

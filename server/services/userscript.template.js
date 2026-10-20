@@ -31,7 +31,7 @@
 // ==UserScript==
 // @name         选品系统采集器
 // @namespace    sourcing-system.local
-// @version      1.2.0
+// @version      1.3.0
 // @description  在山姆/亚马逊/TikTok Shop 商品页与列表页采集商品到本地选品系统
 // @match        *://*.samsclub.com/*
 // @match        *://samsclub.com/*
@@ -54,7 +54,7 @@
   var BASE = "__BASE__";
   var DEFAULT_CH = "__CHANNEL__";
   var MAX_LIST = 60;
-  var VERSION = "1.2.0";
+  var VERSION = "1.3.0";
   var BTN_ID = "sourcing-collector-btn";
   var TITLE_TAG = "【采集器" + VERSION + "】";
 
@@ -115,7 +115,8 @@
   }
 
   /** 列表页：从每个商品卡片取字段（不去重，页面里出现几次就采几次） */
-  function listItems() {
+  /** 山姆列表页：商品链接是 /ip/xxx */
+  function samsclubListItems() {
     var anchors = document.querySelectorAll('a[href*="/ip/"]');
     if (anchors.length < 3) return null;
     var items = [];
@@ -148,6 +149,24 @@
       });
     }
     return items.length >= 3 ? items : null;
+  }
+
+  /**
+   * 亚马逊列表页：链接是 /dp/ASIN，卡片是 div[data-component-type="s-search-result"]，
+   * 与山姆的 /ip/ 结构完全不同，走上方注入的 amazonListItems。
+   */
+  function listItems() {
+    if (channelOf(location.href) === "amazon") return amazonListItems(MAX_LIST);
+    return samsclubListItems();
+  }
+
+  /** 当前页是不是列表/搜索页：解析不到卡片时用它给准确提示，别硬采页面标题 */
+  function isListPage() {
+    var path = location.pathname + location.search;
+    if (/amazon\./i.test(location.href)) return /\/s[?/]|\/b[?/]/.test(path);
+    if (/samsclub\.com/i.test(location.href)) return /\/s\//.test(location.pathname);
+    if (/tiktok/i.test(location.href)) return /search|category/i.test(path);
+    return false;
   }
 
   /** 详情页：单个商品 */
@@ -217,6 +236,13 @@
     var payload = items
       ? { channel: channelOf(location.href), listUrl: location.href.split("#")[0], items: items }
       : singlePayload();
+
+    // 列表页却没解析出卡片时，绝不能退化成「把页面标题当商品」——
+    // 那会往列表里塞一条 "Amazon.com: Flowers - $5 To $25" 的垃圾数据
+    if (!items && isListPage()) {
+      toast("这是列表页，但没解析到商品卡片：请等页面完全加载后再点，或进入商品详情页采集", false);
+      return;
+    }
 
     if (!items && !payload.title) {
       toast("没能从页面解析出商品，请确认已加载完成", false);

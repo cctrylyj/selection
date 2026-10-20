@@ -44,9 +44,10 @@ const BOOKMARKLET_TEMPLATE = (base, defaultChannel) => `javascript:(function(){
   else if (/tiktok/i.test(url)) ch = "tiktokshop";
 
   /* ---------- 列表页：一次采集整页商品 ---------- */
-  function collectList() {
+  /** 山姆列表页：商品链接是 /ip/xxx，从每个链接向上找卡片容器 */
+  function samsclubListItems() {
     var anchors = document.querySelectorAll('a[href*="/ip/"]');
-    if (anchors.length < 3) return false;
+    if (anchors.length < 3) return null;
     var items = [];
     for (var i = 0; i < anchors.length && items.length < 60; i++) {
       var a = anchors[i];
@@ -77,7 +78,22 @@ const BOOKMARKLET_TEMPLATE = (base, defaultChannel) => `javascript:(function(){
         sales: salesFromCard(card),
       });
     }
-    if (items.length < 3) return false;
+    return items.length >= 3 ? items : null;
+  }
+
+  /** 当前页是不是列表/搜索页（用于「解析不到卡片」时给准确提示，而不是硬采页面标题） */
+  function isListPage() {
+    var path = location.pathname + location.search;
+    if (/amazon\\./i.test(location.href)) return /\\/s[?/]|\\/b[?/]/.test(path);
+    if (/samsclub\\.com/i.test(location.href)) return /\\/s\\//.test(location.pathname);
+    if (/tiktok/i.test(location.href)) return /search|category/i.test(path);
+    return false;
+  }
+
+  function collectList() {
+    // 亚马逊的商品链接是 /dp/ASIN，卡片结构也与山姆完全不同，走共用实现
+    var items = ch === "amazon" ? amazonListItems(60) : samsclubListItems();
+    if (!items) return false;
     fetch(BASE.replace(/\\/collect$/, "/collect-list"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel: ch, listUrl: url, items: items }) })
       .then(function (r) { return r.json(); })
       .then(function (d) {
@@ -91,6 +107,13 @@ const BOOKMARKLET_TEMPLATE = (base, defaultChannel) => `javascript:(function(){
     return true;
   }
   if (collectList()) return;
+
+  /* 列表页却没解析出商品卡片：绝不能退化成「把页面标题当商品」，
+     那样会往列表里塞一条 "Amazon.com: Flowers - $5 To $25" 的垃圾数据 */
+  if (isListPage()) {
+    toast("这是列表页，但没解析到商品卡片：请等页面完全加载后再点，或进入商品详情页采集", false);
+    return;
+  }
 
   /* ---------- 商品详情页：采集单个 ---------- */
   var ld = null;

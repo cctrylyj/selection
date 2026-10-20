@@ -105,11 +105,13 @@ function parsePrice(value, currencyHint) {
     return { price: Number.isFinite(value) ? Number(value.toFixed(2)) : null, currency: currencyHint || null };
   }
   const s = String(value).replace(/\s+/g, " ");
+  // 注意 ￥ 是全角（U+FFE5），¥ 是半角（U+00A5）：中文站点（亚马逊海外购、
+  // 京东等）用的是全角，只匹配半角会把人民币价标成 USD。
   const cur = currencyHint
-    || (/[$]/.test(s) ? "USD" : null)
+    || (/[$＄]/.test(s) ? "USD" : null)
     || (/€/.test(s) ? "EUR" : null)
     || (/£/.test(s) ? "GBP" : null)
-    || (/¥|元|人民币/.test(s) ? "CNY" : null);
+    || (/[¥￥元]|人民币|RMB|CNY/.test(s) ? "CNY" : null);
   const m = s.match(/-?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|-?\d+(?:[.,]\d{1,2})?/);
   if (!m) return { price: null, currency: cur };
   let num = m[0];

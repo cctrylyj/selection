@@ -33,11 +33,31 @@ def main() -> int:
         script = r.read().decode("utf-8")
 
     print("== 1. 元数据 ==")
+    # 版本号不写死：只要求「有 @version 且与脚本里的 VERSION 一致，并且 >= 1.3.0」
+    # （1.3.0 才修好亚马逊列表采集，低于它的脚本在亚马逊上会采出页面标题）
+    meta_version = ""
+    for line in script.splitlines():
+        if line.startswith("// @version"):
+            meta_version = line.split()[-1]
+            break
+    js_version = ""
+    for line in script.splitlines():
+        if 'var VERSION = "' in line:
+            js_version = line.split('"')[1]
+            break
+
+    def version_tuple(v: str):
+        try:
+            return tuple(int(x) for x in v.split("."))
+        except ValueError:
+            return (0,)
+
     checks = {
         "@grant unsafeWindow": "@grant        unsafeWindow" in script,
         "不是 @grant none": "@grant        none" not in script,
         "@run-at document-start": "@run-at       document-start" in script,
-        "@version 1.2.0": "@version      1.2.0" in script,
+        f"@version 与 VERSION 一致（{meta_version}）": bool(meta_version) and meta_version == js_version,
+        "@version >= 1.3.0": version_tuple(meta_version) >= (1, 3, 0),
         "@updateURL 已填充": "@updateURL" in script and "__UPDATE__" not in script,
         "无占位符残留": all(p not in script for p in ("__BASE__", "__CHANNEL__", "__UPDATE__", "__PRICE_HELPER__")),
         "BASE 指向本机": "127.0.0.1:8787/api/products/collect" in script,
@@ -47,7 +67,8 @@ def main() -> int:
         "快捷键兜底": "Ctrl+Shift+Z" in script,
         "已注入拆分价格解析": "function priceFromCard" in script and "function joinSplitPrice" in script,
         "已注入销量解析": "function salesFromCard" in script and "function countOf" in script,
-        "价格解析没有被 $ 替换序列改坏": r"[\s$¥€£]*[\d.,]+[\s$¥€£]*$" in script,
+        "已注入亚马逊列表解析": "function amazonListItems" in script and "function amazonCards" in script,
+        "价格解析没有被 $ 替换序列改坏": r"[\s$¥￥＄€£]*[\d.,]+[\s$¥￥＄€£]*$" in script,
     }
     for k, v in checks.items():
         print(f"   {'ok  ' if v else 'FAIL'} {k}")

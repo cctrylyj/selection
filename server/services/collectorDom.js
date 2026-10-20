@@ -36,8 +36,8 @@
 export function looksFullPrice(t) {
   if (!t || !/\d/.test(t) || String(t).length > 12) return false;
   // 货币符号在前（$19.98）或在后（12,34 €）都算
-  if (!/^[\s$¥€£]*[\d.,]+[\s$¥€£]*$/.test(t)) return false;
-  return /[$¥€£]/.test(t) || /\d,\d{3}/.test(t) || /[.,]\d{2}$/.test(t);
+  if (!/^[\s$¥￥＄€£]*[\d.,]+[\s$¥￥＄€£]*$/.test(t)) return false;
+  return /[$¥￥＄€£]/.test(t) || /\d,\d{3}/.test(t) || /[.,]\d{2}$/.test(t);
 }
 
 /**
@@ -118,7 +118,7 @@ export function priceBoxes(root) {
 
 /** 容器里单独渲染的货币符号（山姆是上标 $）；取不到返回空串 */
 export function symbolOf(el) {
-  var m = String((el && el.textContent) || "").match(/[$¥€£]/);
+  var m = String((el && el.textContent) || "").match(/[$¥￥＄€£]/);
   return m ? m[0] : "";
 }
 
@@ -338,6 +338,150 @@ export function salesFromCard(card) {
   return null;
 }
 
+/* ------------------------------------------------------------------ *
+ * 列表页卡片识别（亚马逊）
+ *
+ * 为什么单独做一套：山姆列表页的商品链接是 /ip/xxx，亚马逊是 /dp/ASIN，
+ * 原先列表采集只按 /ip/ 找锚点，在亚马逊上一条都找不到，于是整页被当成
+ * 「一个商品」提交——商品名变成页面标题 "Amazon.com: Flowers - $5 To $25"，
+ * 价格/图片/销量全空。这就是「亚马逊无登录采集有问题」的真正原因。
+ *
+ * 亚马逊搜索结果的卡片结构（中英文站点一致）：
+ *   <div data-component-type="s-search-result" data-asin="B0XXXXXXX">
+ *     <h2>...标题...</h2>
+ *     <a href="/dp/B0XXXXXXX/ref=...">...</a>
+ *     <img class="s-image" src="...">
+ *     <span class="a-price"><span class="a-offscreen">$19.99</span>...</span>
+ *     <span class="a-price a-text-price"><span class="a-offscreen">$29.99</span></span>  ← 划线原价，必须跳过
+ *     <a href="...#customerReviews"><span>5K</span></a>
+ *   </div>
+ * ------------------------------------------------------------------ */
+
+/** 亚马逊商品卡片：广告位/占位卡没有 data-asin，直接跳过 */
+export function amazonCards(root) {
+  var doc = root || document;
+  var out = [];
+  var nodes;
+  try {
+    nodes = doc.querySelectorAll(
+      'div[data-component-type="s-search-result"], div.s-result-item[data-asin]'
+    );
+  } catch (e) {
+    return out;
+  }
+  for (var i = 0; i < nodes.length; i++) {
+    var asin = nodes[i].getAttribute("data-asin");
+    // 真 ASIN 是 10 位字母数字；空字符串的卡片是占位/广告
+    if (asin && asin.length >= 8) out.push(nodes[i]);
+  }
+  return out;
+}
+
+/** 卡片标题：h2 里的文本最干净，其次链接文本，最后退到图片 alt */
+export function amazonTitle(card) {
+  if (!card) return "";
+  var t = "";
+  var h2 = card.querySelector("h2");
+  if (h2) t = h2.innerText || h2.textContent || "";
+  if (!t) {
+    var a = card.querySelector('a[href*="/dp/"]');
+    t = a ? (a.getAttribute("aria-label") || a.textContent || "") : "";
+  }
+  if (!t) {
+    var img = card.querySelector("img");
+    t = img ? (img.alt || "") : "";
+  }
+  return String(t).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 商品链接：统一成 origin + /dp/ASIN。
+ * 亚马逊的 href 带一大堆跟踪参数（ref= / th= / psc=），留着会让同一个商品
+ * 在不同页面算出不同的 channelKey，去重和对比都会失效。
+ */
+export function amazonLink(card) {
+  if (!card) return "";
+  var a = card.querySelector('a[href*="/dp/"]') || card.querySelector("h2 a");
+  if (!a) return "";
+  var href = String(a.getAttribute("href") || a.href || "");
+  var m = href.match(/\/dp\/([A-Za-z0-9]{10})/);
+  if (!m) return href.split("#")[0].split("?")[0];
+  var origin = /^https?:/i.test(location.href) ? location.origin : "https://www.amazon.com";
+  return origin + "/dp/" + m[1];
+}
+
+/**
+ * 价格文本（保留货币符号，交给服务端 parsePrice 推币种）。
+ * 关键：必须排除 .a-text-price（划线原价），否则会把 "原价 29.99" 当现价。
+ */
+export function amazonPrice(card) {
+  if (!card) return null;
+  var el = card.querySelector(".a-price:not(.a-text-price) .a-offscreen")
+    || card.querySelector(".a-price:not(.a-text-price)");
+  var txt = el ? String(el.textContent || "").replace(/\s+/g, " ").trim() : "";
+  // 只要文本里带数字就交给服务端解析；"Currently unavailable" 这种没有数字，走兜底
+  if (txt && /\d/.test(txt) && txt.length <= 24) return txt;
+  return priceFromCard(card);
+}
+
+/**
+ * 销量 / 评价数。
+ *
+ * 优先取「评价数」：星级旁边那个链接（a[href*=customerReviews]），
+ * 中文站点文本是 "5K"/"500"，aria-label 是 "4.6 星，5000 条评价"；
+ * 英文是 "5,000 ratings"。
+ * 取不到再退到 "过去一个月购买了700多件商品" / "700+ bought in past month"。
+ * 后者一定要锚定完整句子——只匹配「N 件」会把标题里的 "12 支装" 当成销量。
+ */
+export function amazonSales(card) {
+  if (!card) return null;
+
+  var link = card.querySelector('a[href*="customerReviews"], a[href*="#customerReviews"]');
+  if (link) {
+    var label = String(link.getAttribute("aria-label") || "");
+    var m = label.match(/([\d.,]+\s*[KkMm万]?)\s*(条评价|评价|ratings?|reviews?)/i);
+    var v = m ? countOf(String(m[1]).replace(/\s+/g, "")) : countOf(link.textContent);
+    if (v !== null) return v;
+  }
+
+  var generic = salesFromCard(card);
+  if (generic !== null) return generic;
+
+  var text = String(card.textContent || "").replace(/\s+/g, " ");
+  var sold = text.match(/过去一个月购买了\s*([\d.,]+\s*[KkMm万]?)\s*(?:多)?\s*件/)
+    || text.match(/([\d.,]+\s*[KkMm]?)\s*\+?\s*bought in past month/i);
+  if (sold) {
+    var n = countOf(String(sold[1]).replace(/\s+/g, ""));
+    if (n !== null) return n;
+  }
+  return null;
+}
+
+/**
+ * 亚马逊列表页整页解析，返回 items 或 null（不足 3 条视为不是列表页）。
+ * 不去重：页面里出现几次就采几次，与山姆列表保持一致。
+ */
+export function amazonListItems(max) {
+  var cards = amazonCards(document);
+  var limit = max || 60;
+  var items = [];
+  for (var i = 0; i < cards.length && items.length < limit; i++) {
+    var card = cards[i];
+    var url = amazonLink(card);
+    var title = amazonTitle(card);
+    if (!url || !title || title.length < 6) continue;
+    var img = card.querySelector("img.s-image") || card.querySelector("img");
+    items.push({
+      url: url,
+      title: title,
+      price: amazonPrice(card),
+      image: img ? (img.currentSrc || img.src || "") : "",
+      sales: amazonSales(card),
+    });
+  }
+  return items.length >= 3 ? items : null;
+}
+
 /** 注入到浏览器脚本里的源码：各函数的源码文本，按依赖顺序排列 */
 export const PRICE_HELPER_SRC = [
   looksFullPrice,
@@ -355,4 +499,11 @@ export const PRICE_HELPER_SRC = [
   countPieces,
   countIn,
   salesFromCard,
+  // 亚马逊列表页专用（放在最后，依赖上面的 priceFromCard / countOf / salesFromCard）
+  amazonCards,
+  amazonTitle,
+  amazonLink,
+  amazonPrice,
+  amazonSales,
+  amazonListItems,
 ].map((f) => f.toString()).join("\n\n");

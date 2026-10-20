@@ -125,6 +125,11 @@ export default function BookmarkletPanel() {
               <b>装过旧版想更新</b>：重新点上面的「下载采集脚本」，拖进浏览器会提示覆盖，点「重新安装」即可；
               也可以打开 Tampermonkey 面板 → 找到「选品系统采集器」→ 点「检查更新」。
               <br />
+              <Text type="warning" strong>1.3.0 修好了亚马逊列表页采集</Text>
+              ——旧版只认山姆的 /ip/ 链接，在亚马逊搜索页会退化成「把页面标题当商品」，
+              采出来是 "Amazon.com: Flowers - $5 To $25" 且没有价格/图片。现在按亚马逊的
+              卡片结构（data-component-type="s-search-result"）逐个解析标题、价格、图片、评价数。
+              <br />
               <Text type="warning" strong>1.2.0 新增「销量」采集</Text>
               ——列表页会连星级右边那个数字（<Text code>★★★★★ 6754</Text>）一起采下来，
               详情页取 JSON-LD 里的评价数；表格新增「销量」列，并支持点表头排序。
@@ -132,7 +137,7 @@ export default function BookmarkletPanel() {
               <Text type="warning" strong>1.1.3 修好了价格读错的问题</Text>
               ——山姆把价格拆成「大字整数 + 小字角分」两个节点渲染（<Text code>$16.87</Text> 会读成
               <Text code>$1687</Text>），旧版脚本采到的价格是错的。
-              <b>请务必覆盖安装到 1.2.0 并刷新页面</b>，否则价格和销量都会缺。
+              <b>请务必覆盖安装到最新版并刷新页面</b>，否则价格和销量都会缺。
             </Paragraph>
           </div>
         </div>
@@ -171,14 +176,14 @@ export default function BookmarkletPanel() {
               但<b>一行都不会执行</b>，页面上自然什么都没有。
               <br />
               3. 看标签页标题：脚本正常执行时，标题前面会出现
-              <Text code>【采集器1.2.0】</Text>。有 → 脚本在跑；没有 → 脚本没被执行，
+              <Text code>【采集器1.3.0】</Text>。有 → 脚本在跑；没有 → 脚本没被执行，
               回去看第 2 条。
               <br />
               4. 确认 Tampermonkey 面板里「选品系统采集器」是<b>启用</b>状态，版本为{" "}
-              <Text code>1.2.0</Text> 或更高。
+              <Text code>1.3.0</Text> 或更高。
               <br />
               5. 在商品页按 <Text keyboard>F12</Text> 打开控制台，看有没有
-              <Text code>[选品采集器] v1.2.0 已注入</Text> 这行。
+              <Text code>[选品采集器] v1.3.0 已注入</Text> 这行。
               <br />
               <b>应急通路（完全不依赖扩展）</b>：如果上面的开关一时开不了，先点上面的
               「复制书签代码」，再到山姆的商品页按 <Text keyboard>F12</Text> → 切到{" "}

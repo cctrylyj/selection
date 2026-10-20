@@ -127,19 +127,33 @@ t("注入源码：是纯函数源码，不含模块语法 / 模板字面量", ()
   assert.ok(PRICE_HELPER_SRC.includes("function priceFromCard"), "必须包含对外入口 priceFromCard");
   assert.ok(PRICE_HELPER_SRC.includes("function salesFromCard"), "必须包含对外入口 salesFromCard");
   // 货币符号要原样保留（路由用替换函数注入，不能被 $& / $' 这类序列吃掉）
-  assert.ok(PRICE_HELPER_SRC.includes("[$¥€£]"), "货币符号字符集应完好");
+  // 含全角 ￥/＄：中文站点（亚马逊海外购等）用的就是全角
+  assert.ok(PRICE_HELPER_SRC.includes("[$¥￥＄€£]"), "货币符号字符集应完好");
+  // 亚马逊列表解析必须被注入：两个模板都直接调用 amazonListItems，
+  // 一旦从数组里漏掉就是页面上的 ReferenceError（按钮点了没反应）
+  assert.ok(PRICE_HELPER_SRC.includes("function amazonListItems"), "必须包含亚马逊列表入口");
+  assert.ok(PRICE_HELPER_SRC.includes("function amazonCards"), "必须包含亚马逊卡片识别");
 });
 
 t("注入源码可被 JS 引擎解析", () => {
   // 与用户在浏览器里跑的是同一段源码
-  const fn = new Function(`${PRICE_HELPER_SRC}\nreturn [priceFromCard, salesFromCard, countOf];`);
-  const [priceFromCard, salesFromCard, countOfInjected] = fn();
+  const fn = new Function(
+    `${PRICE_HELPER_SRC}\nreturn [priceFromCard, salesFromCard, countOf, amazonListItems, amazonPrice, amazonSales, amazonTitle, amazonLink];`
+  );
+  const [priceFromCard, salesFromCard, countOfInjected, amazonListItems, amazonPrice, amazonSales, amazonTitle, amazonLink] = fn();
   assert.equal(typeof priceFromCard, "function");
   assert.equal(typeof salesFromCard, "function");
   assert.equal(typeof countOfInjected, "function");
   assert.equal(countOfInjected("1.2K"), 1200);
   // 没有卡片时不能抛，直接返回 null
   assert.equal(salesFromCard(null), null);
+
+  // 亚马逊那组同样要能在无 DOM 的情况下安全返回
+  assert.equal(typeof amazonListItems, "function");
+  assert.equal(amazonPrice(null), null);
+  assert.equal(amazonSales(null), null);
+  assert.equal(amazonTitle(null), "");
+  assert.equal(amazonLink(null), "");
 });
 
 console.log(`\n${n} passed`);
