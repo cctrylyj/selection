@@ -14,6 +14,15 @@ function assertChannel(c) {
   }
 }
 
+/**
+ * 从 Supabase 的错误对象里挑出最能说明问题的一句话。
+ * 注意 head:true 的计数查询里 message 常常是空串（细节在 details/code 里），
+ * 只取 message 会得到「统计失败：」这种没有信息的提示。
+ */
+function dbErrorDetail(error) {
+  return error.message || error.details || error.hint || error.code || "未知错误";
+}
+
 function rowToDto(row) {
   return {
     id: row.id,
@@ -84,7 +93,7 @@ router.get("/", async (req, res, next) => {
     }
 
     const { data, error, count } = await q;
-    if (error) throw new AppError("DB_ERROR", `查询失败：${error.message}`, error.hint ?? "", 503);
+    if (error) throw new AppError("DB_ERROR", `查询失败：${dbErrorDetail(error)}`, error.hint ?? "", 503);
 
     res.json({
       ok: true,
@@ -116,7 +125,7 @@ router.get("/stats", async (_req, res, next) => {
         const { count, error } = await db.from(TABLE).select("id", { count: "exact", head: true }).eq("channel", c);
         if (error) {
           throw new DbError(
-            `统计失败：${error.message}`,
+            `统计失败：${dbErrorDetail(error)}`,
             "请检查服务端是否已对 public.selections 授权给 service_role（见 sql/004_grant_service_role.sql）。"
           );
         }
