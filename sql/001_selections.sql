@@ -37,3 +37,12 @@ create index if not exists selections_channel_idx
 --    若将来要让前端直连，请改为 anon key + 打开 RLS 并配置
 --    insert/select/delete 策略，且按 user_id 隔离数据。
 -- 2) 删除本表属于危险操作，执行前先确认没有需要保留的数据。
+
+-- 表级授权：后端用 service_role 访问，必须显式给这个角色授权。
+-- 少了这一段，线上会报 "permission denied for table selections"，
+-- 且 /api/selection/stats 会把 error 吞掉返回 0，看起来像「没有数据」。
+-- 已经建过表的库执行 sql/004_grant_service_role.sql 即可。
+grant usage on schema public to service_role;
+grant select, insert, update, delete
+  on table public.selections
+  to service_role;

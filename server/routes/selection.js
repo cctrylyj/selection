@@ -2,7 +2,7 @@
 
 import { Router } from "express";
 import { getDb, TABLE } from "../db.js";
-import { AppError, ChannelError } from "../lib/errors.js";
+import { AppError, ChannelError, DbError } from "../lib/errors.js";
 
 const router = Router();
 
@@ -100,14 +100,26 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-/** GET /api/selection/stats */
+/**
+ * GET /api/selection/stats
+ *
+ * 注意：这里**不能**把查询错误吞掉当成 0。
+ * 曾经写成 `if (error) return { count: 0 }`，结果线上表权限丢了
+ * （permission denied for table selections）时，接口照样回 ok + total=0，
+ * 排查时被误判成「库里确实没数据」。失败就如实报错。
+ */
 router.get("/stats", async (_req, res, next) => {
   try {
     const db = getDb();
     const rows = await Promise.all(
       channels.map(async (c) => {
         const { count, error } = await db.from(TABLE).select("id", { count: "exact", head: true }).eq("channel", c);
-        if (error) return { channel: c, count: 0 };
+        if (error) {
+          throw new DbError(
+            `统计失败：${error.message}`,
+            "请检查服务端是否已对 public.selections 授权给 service_role（见 sql/004_grant_service_role.sql）。"
+          );
+        }
         return { channel: c, count: count ?? 0 };
       })
     );
