@@ -139,27 +139,62 @@ def read_sheet(path: Path):
     return sheet_name, rows, styles
 
 
-def read_numfmts(path: Path):
-    """读出 styles.xml 里的自定义数字格式码，返回 {style_index: formatCode}"""
+def read_styles(path: Path):
+    """解析 styles.xml，返回每个样式索引的完整信息：
+
+    {index: {"numFmt": formatCode|None, "color": "FFD4380D"|None, "bold": bool,
+             "horizontal": "center"|None, "fill": "FFxxxxxx"|None}}
+
+    用来核对「价格/销量是否居中 + 是否上色」，光看数值是看不出来的。
+    """
     ns = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
     with zipfile.ZipFile(path) as z:
         xml = z.read("xl/styles.xml").decode("utf-8")
     import xml.etree.ElementTree as ET
 
     root = ET.fromstring(xml)
-    codes = {}
-    for nf in root.iter(f"{ns}numFmt"):
-        codes[int(nf.get("numFmtId"))] = nf.get("formatCode")
 
-    # cellXfs 里第 i 个 xf 的 numFmtId → 样式索引 i
+    numfmts = {int(nf.get("numFmtId")): nf.get("formatCode") for nf in root.iter(f"{ns}numFmt")}
+
+    # 字体：fontId → (颜色, 是否加粗)
+    fonts = []
+    fonts_node = root.find(f"{ns}fonts")
+    if fonts_node is not None:
+        for f in fonts_node.findall(f"{ns}font"):
+            c = f.find(f"{ns}color")
+            color = c.get("rgb") if c is not None else None
+            fonts.append({"color": color, "bold": f.find(f"{ns}b") is not None})
+
+    # 填充：fillId → 前景色
+    fills = []
+    fills_node = root.find(f"{ns}fills")
+    if fills_node is not None:
+        for fl in fills_node.findall(f"{ns}fill"):
+            fg = fl.find(f"{ns}patternFill/{ns}fgColor")
+            fills.append(fg.get("rgb") if fg is not None else None)
+
     out = {}
     xfs = root.find(f"{ns}cellXfs")
     if xfs is not None:
         for i, xf in enumerate(xfs.findall(f"{ns}xf")):
             fid = int(xf.get("numFmtId") or 0)
-            if fid in codes:
-                out[i] = codes[fid]
+            font_id = int(xf.get("fontId") or 0)
+            fill_id = int(xf.get("fillId") or 0)
+            align = xf.find(f"{ns}alignment")
+            out[i] = {
+                "numFmt": numfmts.get(fid),
+                "color": fonts[font_id]["color"] if font_id < len(fonts) else None,
+                "bold": fonts[font_id]["bold"] if font_id < len(fonts) else False,
+                "horizontal": align.get("horizontal") if align is not None else None,
+                "fill": fills[fill_id] if fill_id < len(fills) else None,
+            }
     return out
+
+
+def check_numfmt(path: Path):
+    """兼容旧调用：只要 {style_index: formatCode} 的映射"""
+    styles = read_styles(path)
+    return {i: v["numFmt"] for i, v in styles.items() if v["numFmt"]}
 
 
 def check_file(path: Path, expect_rows: int, label: str) -> bool:
@@ -195,7 +230,8 @@ def check_price_format(path: Path, label: str) -> bool:
     """价格带单位且仍是数值：看样式索引对应的 formatCode。"""
     ok = True
     _, rows, styles = read_sheet(path)
-    code_map = read_numfmts(path)
+    style_map = read_styles(path)
+    code_map = {i: v["numFmt"] for i, v in style_map.items() if v["numFmt"]}
     print(f"   [{label}] 自定义数字格式: {code_map}")
     body_vals = [(r.get("D"), styles[i + 1].get("D")) for i, r in enumerate(rows[1:])]
     for val, style in body_vals:
@@ -213,6 +249,47 @@ def check_price_format(path: Path, label: str) -> bool:
         if v is not None and not isinstance(v, (int, float)):
             ok = False
             print(f"   FAIL 价格变成了文本 {v!r}（会失去排序/求和能力）")
+    return ok
+
+
+def check_align_and_color(path: Path, label: str) -> bool:
+    """价格 / 销量必须水平居中且上了色（Excel 默认数字右对齐、字体黑）。"""
+    ok = True
+    _, rows, styles = read_sheet(path)
+    style_map = read_styles(path)
+
+    # 列位置：D = 产品价格，E = 销量/评价数
+    expect = {
+        "D": ("产品价格", "FFD4380D"),
+        "E": ("销量", "FF1677FF"),
+    }
+    for col, (name, want_color) in expect.items():
+        # 取第一条有值的行来核对（缺价行没有样式）
+        picked = None
+        for i, r in enumerate(rows[1:]):
+            if r.get(col) is not None:
+                picked = (r.get(col), styles[i + 1].get(col))
+                break
+        if picked is None:
+            ok = False
+            print(f"   FAIL {name} 列没有可核对的有值单元格")
+            continue
+
+        val, style = picked
+        info = style_map.get(style or 0, {})
+        horizontal = info.get("horizontal")
+        color = info.get("color")
+        bold = info.get("bold")
+
+        good_align = horizontal == "center"
+        good_color = (color or "").upper() == want_color
+        print(f"   [{label}] {name} 值={val} 水平对齐={horizontal} 颜色={color} 加粗={bold}")
+        if not good_align:
+            ok = False
+            print(f"   FAIL {name} 没有水平居中（实际 {horizontal!r}，Excel 数字默认右对齐）")
+        if not good_color:
+            ok = False
+            print(f"   FAIL {name} 颜色不对（实际 {color!r}，期望 {want_color}）")
     return ok
 
 
@@ -370,6 +447,7 @@ def main() -> int:
         ok = check_file(all_path, 3, "全部") and ok
         ok = check_embedded_images(all_path, 2, "全部") and ok
         ok = check_price_format(all_path, "全部") and ok
+        ok = check_align_and_color(all_path, "全部") and ok
 
         _, rows, _ = read_sheet(all_path)
         body = rows[1:]

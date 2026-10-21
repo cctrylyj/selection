@@ -28,6 +28,8 @@ function priceFormat(row: TableRow): string | null {
  *   - 去掉「币种」列，单位跟到价格后面（与列表展示一致，不用横向对照两列）
  *   - 去掉「商品链接」列（链接又长又没阅读价值，还会让图片列被文字挤花）
  *   - 图片尺寸 72 → 200
+ *   - 价格 / 销量居中并上色，与页面列表的配色对齐
+ *     （Excel 里数字默认右对齐、字体是黑的，不显式指定就会跟页面对不上）
  */
 const PRODUCT_COLUMNS: ExcelColumn<TableRow>[] = [
   {
@@ -52,12 +54,20 @@ const PRODUCT_COLUMNS: ExcelColumn<TableRow>[] = [
     // 价格缺失时留空单元格，不要写 0，否则会被当成「免费」
     value: (r) => (typeof r.price === "number" ? r.price : null),
     numberFormat: priceFormat,
+    // 与页面 .cell-price 同色（橙红），居中
+    color: "d4380d",
+    bold: true,
+    center: true,
   },
   {
     header: "销量/评价数",
     width: 14,
     format: "int",
     value: (r) => (typeof r.sales === "number" ? r.sales : null),
+    // 与页面 .cell-sales 同色（蓝），居中
+    color: "1677ff",
+    bold: true,
+    center: true,
   },
   {
     header: "图片",
