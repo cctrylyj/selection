@@ -122,7 +122,14 @@ router.get("/stats", async (_req, res, next) => {
     const db = getDb();
     const rows = await Promise.all(
       channels.map(async (c) => {
-        const { count, error } = await db.from(TABLE).select("id", { count: "exact", head: true }).eq("channel", c);
+        // 不用 head:true —— HEAD 请求出错时 PostgREST 不返回正文，
+        // supabase-js 拿到的 error 各字段全空，提示会变成「统计失败：未知错误」。
+        // 改成普通查询 + limit(1)：count 走响应头，错误也能拿到真实描述。
+        const { count, error } = await db
+          .from(TABLE)
+          .select("id", { count: "exact" })
+          .eq("channel", c)
+          .limit(1);
         if (error) {
           throw new DbError(
             `统计失败：${dbErrorDetail(error)}`,
